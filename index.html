@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hypebotix · Autorizar comisión</title>
+<meta name="robots" content="noindex">
+<style>
+  :root { --bg:#0f1720; --card:#17222e; --txt:#e8eef3; --gris:#93a4b3; --azul:#3b82f6; --ok:#22c55e; --mal:#ef4444; --aviso:#f59e0b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:520px; margin:0 auto; padding:24px 16px 40px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--gris); margin:0 0 18px; font-size:14px; }
+  .card { background:var(--card); border-radius:12px; padding:16px; margin-bottom:14px; }
+  .fila { display:flex; justify-content:space-between; gap:12px; padding:6px 0; border-bottom:1px solid #243444; }
+  .fila:last-child { border-bottom:0; }
+  .fila span:first-child { color:var(--gris); }
+  .fila span:last-child { text-align:right; word-break:break-all; font-family:ui-monospace,Consolas,monospace; font-size:14px; }
+  button { width:100%; padding:14px; font-size:17px; font-weight:600; border:0; border-radius:10px; background:var(--azul); color:#fff; margin-top:6px; cursor:pointer; }
+  button:disabled { opacity:.45; cursor:default; }
+  #estado { min-height:24px; margin-top:12px; white-space:pre-wrap; }
+  .ok { color:var(--ok); } .mal { color:var(--mal); } .aviso { color:var(--aviso); }
+  ul { padding-left:20px; margin:6px 0 0; color:var(--gris); font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="t_titulo">Autorizar la comisión del bot</h1>
+  <p class="sub" id="t_sub">Hypebotix · firma con la cartera de tu cuenta de Hyperliquid</p>
+
+  <div class="card">
+    <div class="fila"><span id="t_cobra">Cobra la comisión</span><span id="v_builder">—</span></div>
+    <div class="fila"><span id="t_max">Máximo por orden</span><span id="v_fee">—</span></div>
+    <div class="fila"><span id="t_cuenta">Tu cuenta</span><span id="v_cuenta">—</span></div>
+    <div class="fila"><span id="t_actual">Autorizado ahora</span><span id="v_actual">…</span></div>
+  </div>
+
+  <div class="card">
+    <button id="b_conectar">Conectar cartera</button>
+    <button id="b_autorizar" disabled>Autorizar</button>
+    <div id="estado"></div>
+  </div>
+
+  <div class="card">
+    <strong id="t_que">Qué estás firmando</strong>
+    <ul id="t_lista">
+      <li>Solo autorizas que esa dirección cobre como máximo ese % de cada orden que haga tu bot.</li>
+      <li>No permite mover, retirar ni enviar tu dinero. Tu clave no sale de tu cartera.</li>
+      <li>Puedes retirarla cuando quieras desmarcando la comisión en el bot (deja de aplicarse).</li>
+      <li>Usa solo el enlace o el QR que te da tu bot.</li>
+    </ul>
+  </div>
+</main>
+<script>
+"use strict";
+// Página estática: no guarda nada y no tiene secretos. Pide a la cartera la firma de
+// «approveBuilderFee» (acción firmada por el usuario, igual que el SDK oficial de Hyperliquid:
+// sign_user_signed_action) y la envía a la API de Hyperliquid. Comprobado en el SDK:
+// signatureChainId puede ser cualquier red, así que se usa la red en la que esté la cartera.
+const API = "https://api.hyperliquid.xyz";
+const CREADOR = "0x9fdefdec3932dd71c2b221147d6e61a93024223c";
+const EN = !(navigator.language || "es").toLowerCase().startsWith("es");
+const T = EN ? {
+  t_titulo:"Authorize the bot fee", t_sub:"Hypebotix · sign with the wallet of your Hyperliquid account",
+  t_cobra:"Fee goes to", t_max:"Maximum per order", t_cuenta:"Your account", t_actual:"Authorized now",
+  b_conectar:"Connect wallet", b_autorizar:"Authorize", t_que:"What you are signing",
+  t_lista:["You only allow that address to charge at most that % of each order your bot places.",
+           "It cannot move, withdraw or send your money. Your key never leaves your wallet.",
+           "You can stop it any time by unticking the fee in the bot (it stops being applied).",
+           "Only use the link or QR code your bot gives you."],
+  creador:"Hypebotix (bot creator)", nada:"nothing", sinwallet:"No wallet found. Open this page INSIDE your wallet app (its browser or its QR scanner), or on a computer with the wallet extension.",
+  malenlace:"Invalid link: open it again from the bot.", otra:"The connected wallet is not your bot account.\nConnect ", conectada:"Wallet connected. Press «Authorize» and sign.",
+  firmando:"Confirm the signature in your wallet…", enviando:"Sending to Hyperliquid…", rechazo:"Signature cancelled.",
+  hecho:"✅ Done: authorized. The bot will apply it within a few minutes.", noconf:"Sent, but Hyperliquid does not show it yet. Press «Authorize» again in a minute.",
+  errhl:"Hyperliquid replied: ", ya:"✅ Already authorized. Nothing to do.", noconsulta:"could not check"
+} : {
+  creador:"Hypebotix (creador del bot)", nada:"nada", sinwallet:"No se encuentra ninguna cartera. Abre esta página DENTRO de la app de tu cartera (su navegador o su lector de QR), o en un ordenador con la extensión de la cartera.",
+  malenlace:"Enlace no válido: vuelve a abrirlo desde el bot.", otra:"La cartera conectada no es la cuenta de tu bot.\nConecta ", conectada:"Cartera conectada. Pulsa «Autorizar» y firma.",
+  firmando:"Confirma la firma en tu cartera…", enviando:"Enviando a Hyperliquid…", rechazo:"Firma cancelada.",
+  hecho:"✅ Hecho: autorizada. El bot la aplicará en unos minutos.", noconf:"Enviada, pero Hyperliquid aún no la muestra. Vuelve a pulsar «Autorizar» en un minuto.",
+  errhl:"Hyperliquid respondió: ", ya:"✅ Ya está autorizada. No hace falta nada más.", noconsulta:"no se pudo consultar"
+};
+const $ = id => document.getElementById(id);
+for (const k of ["t_titulo","t_sub","t_cobra","t_max","t_cuenta","t_actual","b_conectar","b_autorizar","t_que"]) if (T[k]) $(k).textContent = T[k];
+if (T.t_lista) $("t_lista").innerHTML = T.t_lista.map(x => "<li>" + x.replace(/</g,"&lt;") + "</li>").join("");
+if (EN) document.documentElement.lang = "en";
+
+function estado(txt, clase) { const e = $("estado"); e.textContent = txt; e.className = clase || ""; }
+const esDir = s => /^0x[0-9a-f]{40}$/.test(s || "");
+const corta = s => s.slice(0, 8) + "…" + s.slice(-6);
+
+const q = new URLSearchParams(location.search);
+const BUILDER = (q.get("b") || "").trim().toLowerCase();
+const CUENTA = (q.get("u") || "").trim().toLowerCase();
+const FEE = (q.get("f") || "").trim();
+const feeNum = Number(FEE);
+const decimas = Math.round(feeNum * 1000);               // décimas de punto básico (0,01 % = 10)
+const valido = esDir(BUILDER) && esDir(CUENTA) && /^\d+(\.\d+)?$/.test(FEE) && feeNum > 0 && feeNum <= 0.1;
+
+$("v_builder").textContent = esDir(BUILDER) ? (BUILDER === CREADOR ? T.creador + " · " : "") + BUILDER : "—";
+$("v_fee").textContent = valido ? FEE.replace(".", EN ? "." : ",") + " %" : "—";
+$("v_cuenta").textContent = esDir(CUENTA) ? CUENTA : "—";
+
+async function aprobado() {
+  const r = await fetch(API + "/info", {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({type:"maxBuilderFee", user:CUENTA, builder:BUILDER})});
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return Number(await r.json());
+}
+async function mostrarActual() {
+  try {
+    const a = await aprobado();
+    $("v_actual").textContent = a > 0 ? (a / 1000) + " %" : T.nada;
+    return a;
+  } catch (e) { $("v_actual").textContent = T.noconsulta; return null; }
+}
+
+let cuentaWallet = null;
+if (!valido) {
+  estado(T.malenlace, "mal");
+  $("b_conectar").disabled = true;
+} else {
+  mostrarActual().then(a => { if (a !== null && a >= decimas) estado(T.ya, "ok"); });
+}
+
+$("b_conectar").onclick = async () => {
+  if (!window.ethereum) { estado(T.sinwallet, "aviso"); return; }
+  try {
+    const cuentas = await window.ethereum.request({method:"eth_requestAccounts"});
+    const c = (cuentas[0] || "").toLowerCase();
+    if (c !== CUENTA) {
+      cuentaWallet = null; $("b_autorizar").disabled = true;
+      estado(T.otra + corta(CUENTA) + " (" + corta(c || "—") + ")", "mal");
+      return;
+    }
+    cuentaWallet = cuentas[0];
+    $("b_autorizar").disabled = false;
+    estado(T.conectada, "");
+  } catch (e) { estado(e.message || String(e), "mal"); }
+};
+
+$("b_autorizar").onclick = async () => {
+  if (!cuentaWallet) return;
+  $("b_autorizar").disabled = true;
+  try {
+    const chainHex = await window.ethereum.request({method:"eth_chainId"});
+    const nonce = Date.now();
+    const maxFeeRate = FEE + "%";
+    const datos = {
+      domain: {name:"HyperliquidSignTransaction", version:"1", chainId: parseInt(chainHex, 16),
+               verifyingContract:"0x0000000000000000000000000000000000000000"},
+      types: {
+        EIP712Domain: [{name:"name",type:"string"},{name:"version",type:"string"},
+                       {name:"chainId",type:"uint256"},{name:"verifyingContract",type:"address"}],
+        "HyperliquidTransaction:ApproveBuilderFee": [{name:"hyperliquidChain",type:"string"},
+          {name:"maxFeeRate",type:"string"},{name:"builder",type:"address"},{name:"nonce",type:"uint64"}]
+      },
+      primaryType: "HyperliquidTransaction:ApproveBuilderFee",
+      message: {hyperliquidChain:"Mainnet", maxFeeRate, builder:BUILDER, nonce}
+    };
+    estado(T.firmando, "");
+    let firma;
+    try {
+      firma = await window.ethereum.request({method:"eth_signTypedData_v4", params:[cuentaWallet, JSON.stringify(datos)]});
+    } catch (e) { estado(e && e.code === 4001 ? T.rechazo : (e.message || String(e)), "mal"); $("b_autorizar").disabled = false; return; }
+    const h = firma.replace(/^0x/, "");
+    let v = parseInt(h.slice(128, 130), 16); if (v < 27) v += 27;
+    const cuerpo = {
+      action: {type:"approveBuilderFee", signatureChainId:chainHex, hyperliquidChain:"Mainnet", maxFeeRate, builder:BUILDER, nonce},
+      nonce, signature: {r:"0x" + h.slice(0, 64), s:"0x" + h.slice(64, 128), v}, vaultAddress:null, expiresAfter:null
+    };
+    estado(T.enviando, "");
+    const r = await fetch(API + "/exchange", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(cuerpo)});
+    const j = await r.json().catch(() => null);
+    if (!j || j.status !== "ok") { estado(T.errhl + (j ? JSON.stringify(j.response || j) : "HTTP " + r.status), "mal"); $("b_autorizar").disabled = false; return; }
+    for (let i = 0; i < 5; i++) {
+      const a = await mostrarActual();
+      if (a !== null && a >= decimas) { estado(T.hecho, "ok"); return; }
+      await new Promise(res => setTimeout(res, 2000));
+    }
+    estado(T.noconf, "aviso"); $("b_autorizar").disabled = false;
+  } catch (e) { estado(e.message || String(e), "mal"); $("b_autorizar").disabled = false; }
+};
+</script>
+</body>
+</html>
